@@ -12,7 +12,7 @@ tape('simple save and retrive', function (tester) {
 
     trie.get('test', function (err, value) {
       t.equal(value, null)
-      t.end(err)
+      t.end()
     })
   })
 

@@ -168,30 +168,35 @@ Trie.prototype._getRaw = function (key, cb) {
       valueEncoding: 'binary'
     }, function (err, foundNode) {
       if (err || !foundNode) {
+        // not passing err as it causes the wrapping async iteration to fail and
+        // interferes with asyncFirstSeries logic, causing an early return
         cb2(null, null)
       } else {
         cb2(null, foundNode)
       }
     })
   }
+  // TODO replace with async.race / async.tryEach
   asyncFirstSeries(this._getDBs, dbGet, cb)
 }
 
 // retrieves a node from dbs by hash
 Trie.prototype._lookupNode = function (node, cb) {
   if (TrieNode.isRawNode(node)) {
-    cb(new TrieNode(node))
+    cb(null, new TrieNode(node))
   } else {
     this._getRaw(node, function (err, value) {
       if (err) {
-        throw err
-      }
-
-      if (value) {
+        // Don't propagate not found as it will end prematurely
+        if (err.err && err.err !== 'no result') {
+          cb(err)
+        } else {
+          cb()
+        }
+      } else if (value) {
         value = new TrieNode(rlp.decode(value))
+        cb(null, value)
       }
-
-      cb(value)
     })
   }
 }
@@ -471,8 +476,8 @@ Trie.prototype._walkTrie = function (root, onNode, onDone) {
     return onDone()
   }
 
-  self._lookupNode(root, function (node) {
-    processNode(root, node, null, function (err) {
+  self._lookupNode(root, function (err, node) {
+    walkNode(err, root, node, null, function (err) {
       if (err) {
         return onDone(err)
       }
@@ -485,8 +490,10 @@ Trie.prototype._walkTrie = function (root, onNode, onDone) {
   var maxPoolSize = 500
   var taskExecutor = new PrioritizedTaskExecutor(maxPoolSize)
 
-  function processNode (nodeRef, node, key, cb) {
-    if (!node) return cb()
+  function walkNode(err, nodeRef, node, key, cb) {
+    if (!node) {
+      return cb(err)
+    }
     if (aborted) return cb()
     var stopped = false
     key = key || []
@@ -516,9 +523,9 @@ Trie.prototype._walkTrie = function (root, onNode, onDone) {
           var childKey = key.concat(keyExtension)
           var priority = childKey.length
           taskExecutor.execute(priority, function (taskCallback) {
-            self._lookupNode(childRef, function (childNode) {
+            self._lookupNode(childRef, function (err, childNode) {
               taskCallback()
-              processNode(childRef, childNode, childKey, cb)
+              walkNode(err, childRef, childNode, childKey, cb)
             })
           })
         }, cb)
@@ -529,9 +536,9 @@ Trie.prototype._walkTrie = function (root, onNode, onDone) {
         childKey.push(childIndex)
         var priority = childKey.length
         taskExecutor.execute(priority, function (taskCallback) {
-          self._lookupNode(childRef, function (childNode) {
+          self._lookupNode(childRef, function (err, childNode) {
             taskCallback()
-            processNode(childRef, childNode, childKey, cb)
+            walkNode(err, childRef, childNode, childKey, cb)
           })
         })
       }
@@ -674,7 +681,7 @@ Trie.prototype._deleteNode = function (key, stack, cb) {
       var branchNodeKey = branchNodes[0][0]
 
       // look up node
-      this._lookupNode(branchNode, function (foundNode) {
+      this._lookupNode(branchNode, function (err, foundNode) {
         key = processBranchNode(key, branchNodeKey, foundNode, parentNode, stack, opStack)
         self._saveStack(key, stack, opStack, cb)
       })
@@ -783,7 +790,7 @@ Trie.prototype.checkRoot = function (root, cb) {
   root = ethUtil.toBuffer(root)
   cb = callTogether(cb, self.sem.leave)
   self.sem.take(function () {
-    this._lookupNode(root, function (value) {
+    this._lookupNode(root, function (err, value) {
       cb(null, !!value)
     })
   })

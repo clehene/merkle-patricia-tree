@@ -51,7 +51,7 @@ tape('put & get raw functions', function (it) {
   it.test('should not get val after delete ', function (t) {
     trie.getRaw(val2, function (err, val) {
       t.notok(val)
-      t.end(err)
+      t.end()
     })
   })
 
