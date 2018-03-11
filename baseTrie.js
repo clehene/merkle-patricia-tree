@@ -66,15 +66,16 @@ function Trie (db, root) {
 Trie.prototype.get = function (key, cb) {
   var self = this
 
-  key = ethUtil.toBuffer(key)
-
-  self.findPath(key, function (err, node, remainder, stack) {
-    var value = null
-    if (node && remainder.length === 0) {
-      value = node.value
-    }
-
-    cb(err, value)
+  cb = callTogether(cb, self.sem.leave)
+  self.sem.take(function () {
+    key = ethUtil.toBuffer(key)
+    self.findPath(key, function (err, node, remainder, stack) {
+      var value = null
+      if (node && remainder.length === 0) {
+        value = node.value
+      }
+      cb(err, value)
+    })
   })
 }
 
@@ -143,9 +144,22 @@ Trie.prototype.del = function (key, cb) {
  * Retrieves a raw value in the underlying db
  * @method getRaw
  * @param {Buffer} key
- * @param {Function} callback A callback `Function`, which is given the arguments `err` - for errors that may have occured and `value` - the found value in a `Buffer` or if no value was found `null`.
+ * @param {Function} cb A callback `Function`, which is given the arguments `err` - for errors that may have occured and `value` - the found value in a `Buffer` or if no value was found `null`.
+ * @param {Boolean} locked flag to
  */
-Trie.prototype.getRaw = function (key, cb) {
+
+Trie.prototype.getRaw = function (key, cb, locked) {
+  var self = this
+  if (locked !== true) {
+    cb = callTogether(cb, self.sem.leave)
+    self.sem.take(function () {
+      self._getRaw(key, cb)
+    })
+  } else {
+    self._getRaw(key, cb)
+  }
+}
+Trie.prototype._getRaw = function (key, cb) {
   key = ethUtil.toBuffer(key)
 
   function dbGet (db, cb2) {
@@ -168,7 +182,7 @@ Trie.prototype._lookupNode = function (node, cb) {
   if (TrieNode.isRawNode(node)) {
     cb(new TrieNode(node))
   } else {
-    this.getRaw(node, function (err, value) {
+    this._getRaw(node, function (err, value) {
       if (err) {
         throw err
       }
@@ -312,24 +326,28 @@ Trie.prototype._findNode = function (key, root, stack, cb) {
  * Finds all nodes that store k,v values
  */
 Trie.prototype._findValueNodes = function (onFound, cb) {
-  this._walkTrie(this.root, function (nodeRef, node, key, walkController) {
-    var fullKey = key
+  var self = this
+  cb = callTogether(cb, this.sem.leave)
+  self.sem.take(function () {
+    self._walkTrie(self.root, function (nodeRef, node, key, walkController) {
+      var fullKey = key
 
-    if (node.key) {
-      fullKey = key.concat(node.key)
-    }
+      if (node.key) {
+        fullKey = key.concat(node.key)
+      }
 
-    if (node.type === 'leaf') {
-      // found leaf node!
-      onFound(nodeRef, node, fullKey, walkController.next)
-    } else if (node.type === 'branch' && node.value) {
-      // found branch with value
-      onFound(nodeRef, node, fullKey, walkController.next)
-    } else {
-      // keep looking for value nodes
-      walkController.next()
-    }
-  }, cb)
+      if (node.type === 'leaf') {
+        // found leaf node!
+        onFound(nodeRef, node, fullKey, walkController.next)
+      } else if (node.type === 'branch' && node.value) {
+        // found branch with value
+        onFound(nodeRef, node, fullKey, walkController.next)
+      } else {
+        // keep looking for value nodes
+        walkController.next()
+      }
+    }, cb)
+  })
 }
 
 /*
@@ -720,7 +738,9 @@ Trie.prototype.createReadStream = function () {
 // creates a new trie backed by the same db
 // and starting at the same root
 Trie.prototype.copy = function () {
-  return new Trie(this.db, this.root)
+  var newTrie = new Trie(this.db, this.root)
+  newTrie.sem = this.sem
+  return newTrie
 }
 
 /**
@@ -759,8 +779,12 @@ Trie.prototype.batch = function (ops, cb) {
  * @param {Function} cb
  */
 Trie.prototype.checkRoot = function (root, cb) {
+  var self = this
   root = ethUtil.toBuffer(root)
-  this._lookupNode(root, function (value) {
-    cb(null, !!value)
+  cb = callTogether(cb, self.sem.leave)
+  self.sem.take(function () {
+    this._lookupNode(root, function (value) {
+      cb(null, !!value)
+    })
   })
 }

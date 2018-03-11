@@ -21,13 +21,14 @@ function iterTest (numOfIter, cb) {
 
   for (i = 0; i < numOfIter; i++) {
     trie.put(vals[i], keys[i], function () {
-      trie.checkpoint()
-      trie.get('test', function () {
-        numOfOps++
-        if (numOfOps === numOfIter) {
-          var hrend = process.hrtime(hrstart)
-          cb(hrend)
-        }
+      trie.checkpoint(function () {
+        trie.get('test', function () {
+          numOfOps++
+          if (numOfOps === numOfIter) {
+            var hrend = process.hrtime(hrstart)
+            cb(hrend)
+          }
+        })
       })
     })
   }

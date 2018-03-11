@@ -19,10 +19,11 @@ tape('put & get raw functions', function (it) {
   })
 
   it.test('should checkpoint and get the rawVal', function (t) {
-    trie.checkpoint()
-    trie.getRaw(key, function (err, rVal) {
-      t.equal(val.toString('hex'), rVal.toString('hex'))
-      t.end(err)
+    trie.checkpoint(function () {
+      trie.getRaw(key, function (err, rVal) {
+        t.equal(val.toString('hex'), rVal.toString('hex'))
+        t.end(err)
+      })
     })
   })
 
@@ -58,12 +59,13 @@ tape('put & get raw functions', function (it) {
   var val3 = crypto.randomBytes(32)
 
   it.test('test commit behavoir', function (t) {
-    trie.checkpoint()
-    trie.putRaw(key3, val3, function () {
-      trie.commit(function () {
-        trie.getRaw(key3, function (err, val) {
-          t.equal(val.toString('hex'), val3.toString('hex'))
-          t.end(err)
+    trie.checkpoint(function () {
+      trie.putRaw(key3, val3, function () {
+        trie.commit(function () {
+          trie.getRaw(key3, function (err, val) {
+            t.equal(val.toString('hex'), val3.toString('hex'))
+            t.end(err)
+          })
         })
       })
     })

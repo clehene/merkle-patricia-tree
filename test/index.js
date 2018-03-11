@@ -244,8 +244,9 @@ tape('testing checkpoints', function (tester) {
   })
 
   it('should create a checkpoint', function (t) {
-    trie.checkpoint()
-    t.end()
+    trie.checkpoint(function () {
+      t.end()
+    })
   })
 
   it('should save to the cache', function (t) {
@@ -267,30 +268,33 @@ tape('testing checkpoints', function (tester) {
   })
 
   it('should commit a checkpoint', function (t) {
-    trie.checkpoint()
-    trie.put('test', 'something', function () {
-      trie.put('love', 'emotion', function () {
-        trie.commit(function () {
-          t.equal(trie.isCheckpoint, false)
-          t.equal(trie.root.toString('hex'), postRoot)
-          t.end()
+    trie.checkpoint(function () {
+      trie.put('test', 'something', function () {
+        trie.put('love', 'emotion', function () {
+          trie.commit(function () {
+            t.equal(trie.isCheckpoint, false)
+            t.equal(trie.root.toString('hex'), postRoot)
+            t.end()
+          })
         })
       })
     })
   })
 
   it('should commit a nested checkpoint', function (t) {
-    trie.checkpoint()
-    var root
-    trie.put('test', 'something else', function () {
-      root = trie.root
-      trie.checkpoint()
-      trie.put('the feels', 'emotion', function () {
-        trie.revert()
-        trie.commit(function () {
-          t.equal(trie.isCheckpoint, false)
-          t.equal(trie.root.toString('hex'), root.toString('hex'))
-          t.end()
+    trie.checkpoint(function () {
+      var root
+      trie.put('test', 'something else', function () {
+        root = trie.root
+        trie.checkpoint(function () {
+          trie.put('the feels', 'emotion', function () {
+            trie.revert()
+            trie.commit(function () {
+              t.equal(trie.isCheckpoint, false)
+              t.equal(trie.root.toString('hex'), root.toString('hex'))
+              t.end()
+            })
+          })
         })
       })
     })

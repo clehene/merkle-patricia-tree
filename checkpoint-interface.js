@@ -34,12 +34,26 @@ function checkpointInterface (trie) {
  * Creates a checkpoint that can later be reverted to or committed. After this is called, no changes to the trie will be permanently saved until `commit` is called
  * @method checkpoint
  */
-function checkpoint () {
+function checkpoint (cb) {
   var self = this
-  var wasCheckpoint = self.isCheckpoint
-  self._checkpoints.push(self.root)
-  if (!wasCheckpoint && self.isCheckpoint) {
-    self._enterCpMode()
+  if (typeof cb !== 'function') {
+    // caller assumes checkpoint is synchronous
+    // TODO remove once callers are modified to call with a callback
+    var wasCheckpoint = self.isCheckpoint
+    self._checkpoints.push(self.root)
+    if (!wasCheckpoint && self.isCheckpoint) {
+      self._enterCpMode()
+    }
+  } else {
+    cb = callTogether(cb, self.sem.leave)
+    self.sem.take(function () {
+      var wasCheckpoint = self.isCheckpoint
+      self._checkpoints.push(self.root)
+      if (!wasCheckpoint && self.isCheckpoint) {
+        self._enterCpMode()
+      }
+      cb()
+    })
   }
 }
 
@@ -181,5 +195,6 @@ ScratchReadStream.prototype._read = function () {
       // close stream
       self.push(null)
     })
+
   }
 }

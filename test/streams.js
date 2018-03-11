@@ -136,8 +136,9 @@ describe('db stream test', function (tester) {
   }
 
   it('should populate trie', function (t) {
-    trie.checkpoint()
-    trie.batch(init, t.end)
+    trie.checkpoint(function () {
+      trie.batch(init, t.end)
+    })
   })
 
   it('should only fetch nodes in the current trie', function (t) {
